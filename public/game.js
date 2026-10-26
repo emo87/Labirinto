@@ -196,7 +196,8 @@ function onLevel(m) {
   const g = new Int8Array(m.g);
   G = { id: m.id, N: m.N, g, doors: m.doors, bt: m.bt, th: m.th, lv: m.lv, total: m.total };
   buildTex(m.th); needSnap = true; lastLvl = m.lv; zbuf = new Float32Array(Math.max(1, buf.width));
-  toast('Livello ' + m.lv + ' — ' + THEMES[m.th].name, 3000, '#ffd24a');
+  if (m.lv === 0) toast('Sala di prova: girate e parlate finché arrivano gli amici', 4500, '#ffd24a');
+  else toast('Livello ' + m.lv + ' — ' + THEMES[m.th].name, 3000, '#ffd24a');
 }
 function onSnapshot(m) {
   if (window.__lab && __lab.dbg.freeze) return;
@@ -224,7 +225,7 @@ function syncUi() {
   $('owait').textContent = isHost ? '' : 'Aspetta che il capo ricominci…';
   $('otime').textContent = fmt(S.tot);
   $('olv').innerHTML = (S.lts || []).map((t, i) => 'Livello ' + (i + 1) + ': <b>' + fmt(t) + '</b>').join('<br>');
-  $('touch').style.display = isTouch && S.st === 'play' ? 'block' : 'none';
+  $('touch').style.display = isTouch && (S.st === 'play' || S.st === 'lobby') ? 'block' : 'none';
 }
 function onEvent(e) {
   SFX.play(e.k, e.x, e.y);
@@ -255,7 +256,7 @@ addEventListener('keydown', (e) => {
   if (e.code >= 'Digit1' && e.code <= 'Digit4') say(+e.code.slice(5) - 1);
 });
 addEventListener('keyup', (e) => { keys.delete(e.code); if (e.code === 'KeyE' || e.code === 'Space') useHeld = false; });
-cv.addEventListener('click', () => { if (!isTouch && S && S.st === 'play' && cv.requestPointerLock) cv.requestPointerLock(); });
+cv.addEventListener('click', () => { if (!isTouch && S && (S.st === 'play' || S.st === 'lobby') && cv.requestPointerLock) cv.requestPointerLock(); });
 document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === cv; });
 document.addEventListener('mousemove', (e) => { if (locked) me.a += e.movementX * 0.0024; });
 const tt = (e, fn) => { e.preventDefault(); for (const t of e.changedTouches) fn(t); };
@@ -326,7 +327,7 @@ function stepLocal(dt) {
   if (keys.has('ArrowRight')) me.a += 2.4 * dt;
   inp = readInput();
   const my = myP();
-  if (!G || !S || S.st !== 'play' || !my || my.ch || S.win || S.rs) return;
+  if (!G || !S || (S.st !== 'play' && S.st !== 'lobby') || !my || my.ch || S.win || S.rs) return;
   const ca = Math.cos(me.a), sa = Math.sin(me.a);
   let vx = inp.f * ca - inp.s * sa, vy = inp.f * sa + inp.s * ca; const l = Math.hypot(vx, vy); if (l > 1) { vx /= l; vy /= l; }
   const dx = vx * 3.2 * dt, dy = vy * 3.2 * dt;
@@ -501,15 +502,16 @@ function drawHud(labels, Lr) {
     const t = 'Porta di uscita: ' + S.ex[0] + '/' + S.ex[1] + ' vicini — servono tutti!';
     ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#000b'; const w = ctx.measureText(t).width + 20; ctx.fillRect(cw / 2 - w / 2, 28, w, 24); ctx.fillStyle = '#7ee081'; ctx.fillText(t, cw / 2, 40);
   }
-  if (!isTouch && !locked && S.st === 'play') { ctx.font = '12px sans-serif'; ctx.fillStyle = '#fffa'; ctx.fillText('Clicca per usare il mouse · WASD muovi · E usa · Q lascia · 1-4 urla · M muto', cw / 2, ch - 8); }
+  if (!isTouch && !locked && (S.st === 'play' || S.st === 'lobby')) { ctx.font = '12px sans-serif'; ctx.fillStyle = '#fffa'; ctx.fillText('Clicca per usare il mouse · WASD muovi · E usa · Q lascia · 1-4 urla · M muto', cw / 2, ch - 8); }
   // avvisi
   for (let i = toasts.length - 1; i >= 0; i--) {
     const ts = toasts[i]; ts.t -= 16; if (ts.t <= 0) { toasts.splice(i, 1); continue; }
   }
+  const ty0 = S.st === 'lobby' ? ch * 0.52 : ch * 0.18;   // in sala d'attesa il pannello del codice occupa la parte alta
   toasts.forEach((ts, i) => {
     ctx.globalAlpha = clamp(ts.t / 500, 0, 1) * clamp((ts.max - ts.t) / 150 + 0.2, 0, 1);
-    ctx.font = 'bold 22px sans-serif'; ctx.fillStyle = '#000c'; const w = ctx.measureText(ts.text).width + 28; ctx.fillRect(cw / 2 - w / 2, ch * 0.18 + i * 40 - 18, w, 34);
-    ctx.fillStyle = ts.color; ctx.fillText(ts.text, cw / 2, ch * 0.18 + i * 40);
+    ctx.font = 'bold 22px sans-serif'; ctx.fillStyle = '#000c'; const w = ctx.measureText(ts.text).width + 28; ctx.fillRect(cw / 2 - w / 2, ty0 + i * 40 - 18, w, 34);
+    ctx.fillStyle = ts.color; ctx.fillText(ts.text, cw / 2, ty0 + i * 40);
     ctx.globalAlpha = 1;
   });
   // joystick touch
@@ -526,11 +528,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#0b0b10'; ctx.fillRect(0, 0, cw, ch);
-  if (!S || !G || S.st === 'lobby') {
-    if (S) { ctx.fillStyle = '#fff3'; ctx.font = 'bold 20px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🧱 In attesa di iniziare…', cw / 2, ch * 0.7); }
-    if (S && ws) sendInput(now);
-    return;
-  }
+  if (!S || !G) return;     // in sala d'attesa G è il piccolo labirinto di prova: si cammina e si parla davvero
   stepLocal(dt); sendInput(now);
   // posizioni morbide degli altri
   const k = 1 - Math.exp(-dt * 14);
@@ -559,4 +557,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // aggancio per i test automatici
-window.__lab = { dbg: { freeze: false, force: 0 }, set S(v) { S = v; }, get S() { return S; }, get G() { return G; }, me, get lightCur() { return lightCur; }, Voice, SFX, THEMES };
+window.__lab = { dbg: { freeze: false, force: 0 }, get needSnap() { return needSnap; }, set S(v) { S = v; }, get S() { return S; }, get G() { return G; }, me, get lightCur() { return lightCur; }, Voice, SFX, THEMES };

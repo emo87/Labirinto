@@ -28,6 +28,8 @@ Usate le **cuffie**, altrimenti la voce degli altri rientra nel microfono.
 
 ## Come si gioca
 
+- **Sala di prova**: mentre aspettano gli amici si cammina e si parla in un piccolo labirinto finto (11×11), senza mostro né porte: serve anche a provare microfono e voce di prossimità. Quando il capo preme "Inizia", tutti passano al livello 1.
+
 - **5 livelli**, sempre più grandi, con temi diversi (Cantina, Supermercato, Ospedale, Castello).
 - **Porte a doppio pulsante**: si aprono solo se due giocatori premono due pulsanti diversi entro 1,5 secondi. Restano aperte 8 secondi. Non si possono aggirare.
 - **Porta di uscita**: si apre solo quando **tutti** sono vicini; un amico incatenato va prima liberato.
@@ -39,7 +41,7 @@ Usate le **cuffie**, altrimenti la voce degli altri rientra nel microfono.
 ## Test automatici
 
 ```bash
-node test/logic.test.js     # regole di gioco, senza rete (26 controlli)
+node test/logic.test.js     # regole di gioco, senza rete (27 controlli)
 node test/play.js           # partita vera via WebSocket: 4 bot risolvono il livello 1 (PLAY_LEVELS=5 per tutti e 5)
 NODE_PATH=/opt/npm-tools/node_modules node test/e2e.js cartella   # 2 browser Chromium: lobby, movimento, voce WebRTC
 NODE_PATH=/opt/npm-tools/node_modules node test/visual.js cartella # screenshot delle scene principali

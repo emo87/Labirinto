@@ -230,6 +230,31 @@ function tryGen(level, nPlayers, seed) {
 }
 function passable2(g) { return (i) => passable(g[i]); }
 
+// Sala di prova: un piccolo labirinto finto (senza porte, mostro, blackout) dove si cammina e si parla
+// mentre aspettano gli amici. Spariscono tutti quando il capo preme "Inizia".
+function genLobby() {
+  const cells = 5, N = cells * 2 + 1, g = new Array(N * N).fill(1), I = (x, y) => y * N + x;
+  const vis = new Uint8Array(cells * cells), st = [[0, 0]]; vis[0] = 1; g[I(1, 1)] = 0;
+  while (st.length) {
+    const [cx, cy] = st[st.length - 1], opts = [];
+    for (const [dx, dy] of DIRS) { const nx = cx + dx, ny = cy + dy; if (nx >= 0 && ny >= 0 && nx < cells && ny < cells && !vis[ny * cells + nx]) opts.push([nx, ny, dx, dy]); }
+    if (!opts.length) { st.pop(); continue; }
+    const [nx, ny, dx, dy] = opts[(Math.random() * opts.length) | 0];
+    vis[ny * cells + nx] = 1; g[I(2 * cx + 1 + dx, 2 * cy + 1 + dy)] = 0; g[I(2 * nx + 1, 2 * ny + 1)] = 0; st.push([nx, ny]);
+  }
+  const closed = [];
+  for (let y = 1; y < N - 1; y++) for (let x = 1; x < N - 1; x++) if ((x + y) % 2 === 1 && g[I(x, y)] === 1) closed.push(I(x, y));
+  for (let k = 0; k < 4 && closed.length; k++) g[closed.splice((Math.random() * closed.length) | 0, 1)[0]] = 0;   // qualche anello
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    if (g[I(x, y)] !== 1) continue;
+    let v = zoneOf(x, y, N);
+    const nearFloor = DIRS.some(([dx, dy]) => { const nx = x + dx, ny = y + dy; return nx >= 0 && ny >= 0 && nx < N && ny < N && g[I(nx, ny)] === 0; });
+    if (nearFloor && Math.random() < 0.1) v = 5 + ((Math.random() * 4) | 0);
+    g[I(x, y)] = v;
+  }
+  return { N, g, level: 0, theme: 0, doors: [], buttons: [], torches: [], start: { x: 1.5, y: 1.5, a: g[I(2, 1)] === 0 ? 0 : Math.PI / 2 } };
+}
+
 function genLevel(level, nPlayers, seed) {
   for (let k = 0; k < 40; k++) {
     const L = tryGen(level, nPlayers, (seed + k * 7919) >>> 0);
@@ -262,7 +287,7 @@ function makeCode() {
 }
 function createRoom(code) {
   return {
-    code: code || makeCode(), players: new Map(), st: 'lobby', level: 0, L: null, host: null, nid: 1,
+    code: code || makeCode(), lobbyL: genLobby(), players: new Map(), st: 'lobby', level: 0, L: null, host: null, nid: 1,
     time: 0, total: 0, lvT0: 0, lvTimes: [], lid: 0, tiles: [], ev: [], monster: null, shT: 45, shWarn: false, boT: 70, boLeft: 0,
     exitHold: 0, winT: 0, resetT: 0, noMonster: process.env.NO_MONSTER === '1',
   };
@@ -276,6 +301,7 @@ function addPlayer(r, ws, name) {
     chained: false, fr: 0, imm: 0, it: null, sy: -1, syT: 0,
   };
   r.players.set(p.id, p);
+  if (r.st === 'lobby') { const s0 = r.lobbyL.start; p.x = s0.x + (Math.random() - 0.5) * 0.4; p.y = s0.y + (Math.random() - 0.5) * 0.4; p.a = s0.a; }
   if (!r.host) r.host = p.id;
   if (ws) { ws.room = r; ws.pid = p.id; }
   if (r.L) placePlayers(r);
@@ -307,10 +333,10 @@ function startGame(r) {
   r.total = 0; r.time = 0; r.lvTimes = [];
   loadLevel(r, 1);
 }
-function levelMsg(r) {
-  const L = r.L;
+function levelMsg(r, L) {
+  L = L || r.L;
   return {
-    t: 'lvl', id: r.lid, lv: r.level, total: LEVELS, th: L.theme, N: L.N, g: L.g,
+    t: 'lvl', id: r.lid, lv: L.level || 0, total: LEVELS, th: L.theme, N: L.N, g: L.g,
     doors: L.doors.map((d) => ({ id: d.id, x: d.x, y: d.y, v: d.v, k: d.kind })),
     bt: L.buttons.map((b) => ({ id: b.id, x: b.x, y: b.y, d: b.door })),
   };
@@ -441,7 +467,18 @@ function monsterStep(r, dt) {
 }
 
 // ---------- Passo di simulazione ----------
+function lobbyStep(r, dt) {
+  const L = r.lobbyL;
+  for (const p of r.players.values()) {
+    if (p.syT > 0) { p.syT -= dt; if (p.syT <= 0) p.sy = -1; }
+    const ca = Math.cos(p.a), sa = Math.sin(p.a);
+    let vx = p.in.f * ca - p.in.s * sa, vy = p.in.f * sa + p.in.s * ca;
+    const l = Math.hypot(vx, vy); if (l > 1) { vx /= l; vy /= l; }
+    move(L.g, L.N, p, vx * PSPEED * dt, vy * PSPEED * dt, PRAD);
+  }
+}
 function step(r, dt) {
+  if (r.st === 'lobby') { lobbyStep(r, dt); return; }
   if (r.st !== 'play' || !r.L) return;
   const L = r.L, players = [...r.players.values()];
   r.time += dt;
@@ -538,7 +575,7 @@ function flush(r) {
   if (r.tiles.length) { broadcast(r, { t: 'tiles', c: r.tiles }); r.tiles = []; }
   if (r.ev.length) {
     for (const e of r.ev) {
-      if (e.k === 'level') broadcast(r, levelMsg(r));
+      if (e.k === 'level') broadcast(r, levelMsg(r, r.L));
       broadcast(r, { t: 'ev', ...e });
     }
     r.ev = [];
@@ -562,7 +599,7 @@ function makeServer() {
   wss.on('connection', (ws) => {
     const welcome = (r, p) => {
       send(ws, { t: 'joined', id: p.id, code: r.code, max: MAXP });
-      if (r.L && r.st === 'play') send(ws, levelMsg(r));
+      send(ws, levelMsg(r, r.L && r.st === 'play' ? r.L : r.lobbyL));
     };
     ws.on('message', (raw) => {
       let m; try { m = JSON.parse(raw); } catch { return; }
@@ -581,7 +618,7 @@ function makeServer() {
       const r = ws.room, p = r.players.get(ws.pid);
       if (!p) return;
       if (m.t === 'in') {
-        if (r.L && m.l !== r.lid) return;   // input vecchio, spedito prima che il client caricasse questo livello: non deve sovrascrivere la direzione di partenza
+        if (m.l !== r.lid) return;   // input vecchio, spedito prima che il client caricasse questo livello: non deve sovrascrivere la direzione di partenza
         p.in.f = clamp(+m.f || 0, -1, 1); p.in.s = clamp(+m.s || 0, -1, 1);
         p.a = Number.isFinite(+m.a) ? +m.a : p.a;
         const u = !!m.u; if (u && !p.in.u) p.edge = true; p.in.u = u;

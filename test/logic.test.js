@@ -73,6 +73,24 @@ const passable = (v) => v === 0 || v >= constants.D0;
   ok('muri mobili: ' + shifted + ' cambi in 300 turni, invarianti sempre rispettati');
 }
 
+// 2b) Sala di prova: un piccolo labirinto dove si cammina mentre aspettano gli amici
+{
+  const r = createRoom('LOBB'); const ps = []; for (let i = 0; i < 3; i++) ps.push(addPlayer(r, stub(), 'P' + i));
+  assert.strictEqual(r.st, 'lobby'); assert(r.lobbyL && r.lobbyL.N <= 15, 'la sala di prova è piccola');
+  const msg = S.levelMsg(r, r.lobbyL); assert.strictEqual(msg.lv, 0); assert.strictEqual(msg.doors.length, 0);
+  const g = r.lobbyL.g, N = r.lobbyL.N, startIdx = 1 * N + 1;
+  const d = bfs(g, N, startIdx, (i) => passable(g[i])); assert(!Array.from(d).some((v, i) => passable(g[i]) && v < 0), 'sala di prova tutta raggiungibile');
+  const p = ps[0], x0 = p.x, y0 = p.y;
+  p.a = r.lobbyL.start.a; p.in.f = 1;
+  for (let i = 0; i < 20; i++) step(r, 1 / 30);
+  assert(Math.hypot(p.x - x0, p.y - y0) > 0.5, 'in sala di prova ci si muove');
+  for (let k = 0; k < 600; k++) { p.a = Math.random() * 6.28; p.in.f = 1; p.in.s = Math.random() - 0.5; step(r, 1 / 30); assert(g[Math.floor(p.y) * N + Math.floor(p.x)] === 0, 'dentro un muro'); }
+  const lid0 = r.lid; startGame(r);
+  assert(r.lid > lid0 && r.st === 'play' && r.L, 'con Inizia si passa al livello vero');
+  for (const q of r.players.values()) assert.strictEqual(Math.hypot(q.x - r.L.start.x, q.y - r.L.start.y) < 0.6, true, 'tutti alla partenza del livello vero');
+  ok('sala di prova: si cammina nel piccolo labirinto, poi Inizia porta tutti al livello 1');
+}
+
 // helper: stanza pronta con 4 giocatori e senza mostro
 function room4() {
   const r = createRoom('T' + Math.random()); r.noMonster = true;

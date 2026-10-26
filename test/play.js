@@ -29,8 +29,8 @@ const fail = (m) => { console.log('FAIL:', m); srv.kill(); process.exit(1); };
   for (const n of ['Owe', 'Amico', 'Giulia', 'Marco']) await mk(n);
   console.log('stanza', code, 'con', bots.length, 'bot');
   bots[0].ws.send(JSON.stringify({ t: 'start' }));
-  for (let i = 0; i < 100 && !G; i++) await sleep(50);
-  if (!G) fail('livello non arrivato');
+  for (let i = 0; i < 100 && !(G && G.lv === 1); i++) await sleep(50);
+  if (!G || G.lv !== 1) fail('livello non arrivato');
 
   const N = () => G.N, idx = (x, y) => y * N() + x;
   const tile = (p) => [Math.floor(p.x), Math.floor(p.y)];

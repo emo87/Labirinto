@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Labirinto</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b0b10;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;color:#fff;touch-action:none;user-select:none;-webkit-user-select:none}
+  canvas{display:block;width:100%;height:100%}
+  .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(8,8,14,.88);z-index:5}
+  .card{background:#23232f;padding:22px;border-radius:16px;width:min(360px,90vw);text-align:center;box-shadow:0 10px 40px #000a}
+  .card h1{margin:0 0 4px;font-size:24px}
+  .card h2{margin:0 0 8px;font-size:26px;color:#ffd24a}
+  .card p{margin:4px 0 14px;color:#b9b9cc;font-size:14px;line-height:1.4}
+  input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:2px solid #44445a;background:#14141e;color:#fff;font-size:16px;margin-bottom:10px;text-align:center}
+  button{cursor:pointer;border:0;border-radius:10px;padding:12px 16px;font-size:16px;font-weight:700;background:#ff7a2f;color:#fff;font-family:inherit}
+  button.sec{background:#44445a}
+  .card button{width:100%;margin-bottom:8px}
+  #err{color:#ff8a8a;min-height:18px;font-size:14px}
+  #lobby{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#000b;border-radius:14px;padding:14px 18px;text-align:center;z-index:4;display:none;width:min(380px,92vw);box-sizing:border-box}
+  #lobby .code{font-size:32px;font-weight:900;letter-spacing:6px;color:#ffd24a}
+  #lobby .row{display:flex;gap:8px;justify-content:center;margin-top:10px}
+  #lobby .who{margin-top:8px;font-size:15px;line-height:1.7}
+  #lobby .hint{font-size:12px;color:#b9b9cc;margin-top:8px}
+  #hudBtns{position:fixed;top:8px;right:8px;display:none;gap:6px;z-index:3}
+  #hudBtns button{padding:8px 10px;font-size:13px;background:#000a;border:1px solid #fff4}
+  #hudBtns button.off{background:#a22}
+  #touch{position:fixed;inset:0;pointer-events:none;display:none;z-index:2}
+  #touch button{position:absolute;pointer-events:auto;border-radius:50%;background:#000a;border:2px solid #fff6;color:#fff;font-size:15px;padding:0}
+  #bUse{right:18px;bottom:26px;width:84px;height:84px;font-size:17px}
+  #bDrop{right:114px;bottom:34px;width:56px;height:56px;font-size:12px}
+  #bChat{right:18px;bottom:122px;width:48px;height:48px;font-size:20px}
+  #shout{position:fixed;right:70px;bottom:118px;display:none;flex-direction:column;gap:6px;z-index:3}
+  #shout button{padding:8px 12px;font-size:13px;background:#000c;border:1px solid #fff4;pointer-events:auto}
+  #mic{font-size:13px;color:#ffb46b;margin:6px 0 10px;line-height:1.4}
+  #score{text-align:left;margin:10px 0;font-size:16px;line-height:1.7}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="menu" class="overlay">
+  <div class="card">
+    <h1>🧱 Labirinto</h1>
+    <p>Co-op in prima persona fino a 4 giocatori.<br>Usate la voce: nessuno vede la mappa!</p>
+    <input id="name" maxlength="12" placeholder="Il tuo nome" autocomplete="off">
+    <button id="btnCreate">Crea stanza</button>
+    <p style="margin:6px 0">oppure entra con un codice</p>
+    <input id="code" maxlength="4" placeholder="CODICE" autocomplete="off" style="text-transform:uppercase;letter-spacing:6px;font-weight:800">
+    <button id="btnJoin" class="sec">Entra</button>
+    <div id="mic">🎧 Ti chiederò il microfono: la chat vocale è il cuore del gioco. Meglio con le cuffie.</div>
+    <div id="err"></div>
+  </div>
+</div>
+
+<div id="lobby">
+  <div>Codice stanza</div>
+  <div class="code" id="lcode">----</div>
+  <div class="who" id="lwho"></div>
+  <div class="row">
+    <button id="btnShare" class="sec">Invita amici</button>
+    <button id="btnStart">Inizia!</button>
+  </div>
+  <div class="hint" id="lhint"></div>
+</div>
+
+<div id="hudBtns">
+  <button id="bMute">🎤 Mic</button>
+  <button id="bVoice">🔊 Vicini</button>
+</div>
+
+<div id="touch">
+  <button id="bUse">Usa</button>
+  <button id="bDrop">Lascia</button>
+  <button id="bChat">💬</button>
+</div>
+<div id="shout"></div>
+
+<div id="over" class="overlay" style="display:none">
+  <div class="card">
+    <h2>Siete usciti! 🎉</h2>
+    <p>Avete superato tutti i livelli.</p>
+    <div>Tempo totale: <b id="otime">0</b></div>
+    <div id="olv" style="margin:8px 0;font-size:14px;color:#b9b9cc;line-height:1.6"></div>
+    <button id="btnAgain" style="margin-top:12px">Ricomincia</button>
+    <div id="owait" style="font-size:13px;color:#b9b9cc"></div>
+  </div>
+</div>
+
+<script src="voice.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

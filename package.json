@@ -1,0 +1,16 @@
+{
+  "name": "labirinto",
+  "version": "0.1.0",
+  "description": "Labirinto co-op in prima persona, fino a 4 giocatori, con chat vocale di prossimit\u00e0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/logic.test.js && node test/play.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

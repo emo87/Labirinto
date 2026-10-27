@@ -106,7 +106,7 @@ const fail = (m) => { console.log('FAIL:', m); srv.kill(); process.exit(1); };
   }
   for (let k = 1; k <= LEVELS; k++) {
     // aspetto il nuovo livello E la prima posizione di partenza (altrimenti uso le coordinate del livello precedente)
-    if (k > 1) while (G.lv !== k || Math.hypot(pos(bots[2]).x - 1.5, pos(bots[2]).y - 1.5) > 1.5) { check(); await sleep(40); }
+    if (k > 1) { while (G.lv !== k) { check(); await sleep(40); } await sleep(500); }
     await solveLevel();
   }
   await sleep(500);

@@ -2,7 +2,7 @@
 // Labirinto — client: raycasting, input, HUD, effetti sonori
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const EM = ['🤠', '👩‍🍳', '🧑‍🔧', '🥷', '🤡', '🧑‍🚀'];
+const EM = ['🤠', '👩‍🍳', '🧑‍🔧', '🥷', '🤡', '🧑‍🚀'];   // solo per l'elenco giocatori
 const COL = ['#ffd24a', '#7ee081', '#6ec1ff', '#ff8ad8', '#ffa96b', '#c3a6ff'];
 const PH = ['AIUTOOO!', 'PREMO IO!', 'ARRIVO!', 'SIETE LENTI!'];
 const fmt = (sec) => Math.floor(sec / 60) + ':' + ('0' + Math.round(sec % 60)).slice(-2);   // cronometro: serve solo a sapere quanto ci avete messo
@@ -89,18 +89,92 @@ function buildTex(th) {
   bgKey = '';
 }
 
-// ---------- Sprite emoji ----------
+// ---------- Sprite disegnati nel codice ----------
 const spriteCache = new Map();
-function emojiCanvas(key, draw) {
+function spriteCanvas(key, draw) {
   let c = spriteCache.get(key);
-  if (!c) { c = mkCanvas(96); const x = c.getContext('2d'); x.textAlign = 'center'; x.textBaseline = 'middle'; draw(x); spriteCache.set(key, c); }
+  if (!c) { c = mkCanvas(96); const x = c.getContext('2d'); x.lineJoin = 'round'; x.lineCap = 'round'; draw(x); spriteCache.set(key, c); }
   return c;
 }
-function emo(x, ch, px, py, size) { x.font = size + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; x.fillText(ch, px, py); }
-const playerSprite = (e, ch, it) => emojiCanvas('p' + e + ch + it, (x) => { emo(x, EM[e], 48, ch ? 38 : 46, 64); if (ch) emo(x, '⛓️', 48, 76, 34); if (it) emo(x, '🔦', 80, 62, 28); });
-const monsterSprite = (st) => emojiCanvas('m' + st, (x) => emo(x, st ? '🥴' : '👹', 48, 50, 84));
-const torchSprite = () => emojiCanvas('t', (x) => emo(x, '🔦', 48, 50, 76));
-const buttonSprite = (d, on) => emojiCanvas('b' + d + on, (x) => emo(x, on ? '🟢' : (d === 0 ? '🔴' : '🔵'), 48, 50, 76));
+function emo(x, ch, px, py, size) { x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = size + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; x.fillText(ch, px, py); }
+function ell(x, cx, cy, rx, ry, fill, stroke) { x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, 7); if (fill) { x.fillStyle = fill; x.fill(); } if (stroke) { x.strokeStyle = stroke; x.lineWidth = 2.5; x.stroke(); } }
+function rrect(x, px, py, w, h, r, fill) { x.beginPath(); x.moveTo(px + r, py); x.arcTo(px + w, py, px + w, py + h, r); x.arcTo(px + w, py + h, px, py + h, r); x.arcTo(px, py + h, px, py, r); x.arcTo(px, py, px + w, py, r); x.closePath(); x.fillStyle = fill; x.fill(); }
+// 4 omini diversi: cowboy, cuoca, meccanico, ninja. Il corpo è del colore del giocatore.
+const AV = [
+  { body: '#e0a82e', dark: '#9a6f12' },
+  { body: '#4fb86a', dark: '#2a7a43' },
+  { body: '#4a95dd', dark: '#2a5f99' },
+  { body: '#e0609f', dark: '#9a3a6c' },
+];
+const playerSprite = (e, ch, it) => spriteCanvas('p' + e + ch + it, (x) => {
+  const A = AV[e % 4], skin = '#f1c9a0', cx = 48;
+  ell(x, cx, 92, 22, 4, 'rgba(0,0,0,.35)');                       // ombra
+  rrect(x, cx - 17, 52, 34, 38, 12, A.body);                       // corpo
+  rrect(x, cx - 17, 78, 34, 12, 6, A.dark);                        // gambe/pantaloni
+  ell(x, cx - 20, 66, 5, 9, A.body); ell(x, cx + 20, 66, 5, 9, A.body);   // braccia
+  ell(x, cx, 36, 19, 19, skin, '#00000055');                       // testa
+  if (e % 4 === 0) {                                               // cowboy: cappello
+    ell(x, cx, 22, 30, 6, '#7a4a22'); rrect(x, cx - 14, 6, 28, 18, 7, '#8f5a2a'); x.fillStyle = '#e0a82e'; x.fillRect(cx - 14, 17, 28, 4);
+  } else if (e % 4 === 1) {                                        // cuoca: cappello da chef
+    ell(x, cx - 10, 14, 9, 9, '#fff'); ell(x, cx + 10, 14, 9, 9, '#fff'); ell(x, cx, 10, 11, 10, '#fff'); rrect(x, cx - 15, 18, 30, 8, 3, '#eee');
+  } else if (e % 4 === 2) {                                        // meccanico: casco giallo e occhialoni
+    x.fillStyle = '#f2c230'; x.beginPath(); x.arc(cx, 28, 20, Math.PI, 0); x.fill(); x.fillRect(cx - 22, 26, 44, 5);
+    ell(x, cx - 8, 38, 7, 6, '#9be', '#333'); ell(x, cx + 8, 38, 7, 6, '#9be', '#333');
+  } else {                                                         // ninja: fascia e maschera
+    rrect(x, cx - 19, 30, 38, 14, 5, '#222'); x.fillStyle = '#e0609f'; x.fillRect(cx - 19, 26, 38, 5); x.fillStyle = '#e0609f'; x.fillRect(cx + 16, 24, 10, 4); x.fillRect(cx + 18, 30, 10, 3);
+  }
+  if (e % 4 !== 3) { ell(x, cx - 7, 38, 2.6, 3.4, '#222'); ell(x, cx + 7, 38, 2.6, 3.4, '#222'); }
+  else { ell(x, cx - 7, 37, 3.2, 2.4, '#fff'); ell(x, cx + 7, 37, 3.2, 2.4, '#fff'); ell(x, cx - 7, 37, 1.4, 1.4, '#000'); ell(x, cx + 7, 37, 1.4, 1.4, '#000'); }
+  if (e % 4 !== 3) { x.strokeStyle = '#7a3a2a'; x.lineWidth = 2; x.beginPath(); x.arc(cx, 44, 5, 0.2, Math.PI - 0.2); x.stroke(); }
+  if (it) { rrect(x, cx + 20, 56, 7, 20, 2, '#444'); ell(x, cx + 23.5, 54, 6, 6, '#ffd24a'); ell(x, cx + 23.5, 54, 11, 11, 'rgba(255,220,100,.25)'); }
+  if (ch) {                                                         // catene
+    x.strokeStyle = '#bbb'; x.lineWidth = 4;
+    for (let i = 0; i < 5; i++) { x.beginPath(); x.ellipse(cx - 18 + i * 9, 62 + (i % 2) * 5, 6, 3.4, 0.3, 0, 7); x.stroke(); }
+    ell(x, cx, 88, 14, 5, '#777', '#444');
+  }
+});
+// Il mostro: sagoma nera, occhi bianchi, bordo viola appena visibile
+const monsterSprite = (st) => spriteCanvas('m' + st, (x) => {
+  const cx = 48;
+  const body = () => {
+    x.beginPath(); x.moveTo(cx - 24, 94);
+    x.bezierCurveTo(cx - 34, 70, cx - 26, 34, cx - 18, 20);
+    x.bezierCurveTo(cx - 14, 6, cx + 14, 6, cx + 18, 20);
+    x.bezierCurveTo(cx + 26, 34, cx + 34, 70, cx + 24, 94);
+    for (let i = 0; i < 7; i++) { const px = cx + 24 - i * 8; x.lineTo(px - 4, 86 + (i % 2 ? 0 : 9)); }
+    x.closePath();
+  };
+  x.save();
+  if (st) { x.translate(cx, 94); x.rotate(0.14); x.translate(-cx, -94); }
+  x.shadowColor = st ? '#8855cc' : '#a02050'; x.shadowBlur = 8; x.fillStyle = '#000'; body(); x.fill(); x.shadowBlur = 0;
+  x.fillStyle = '#050005'; body(); x.fill();
+  // braccia lunghe e sottili
+  x.strokeStyle = '#000'; x.lineWidth = 6; x.beginPath(); x.moveTo(cx - 20, 40); x.quadraticCurveTo(cx - 40, 62, cx - 36, 90); x.moveTo(cx + 20, 40); x.quadraticCurveTo(cx + 40, 62, cx + 36, 90); x.stroke();
+  x.lineWidth = 2.5; for (const sx of [-1, 1]) for (let f = -1; f <= 1; f++) { x.beginPath(); x.moveTo(cx + sx * 36, 90); x.lineTo(cx + sx * (36 + f * 3 + 2), 95); x.stroke(); }
+  // occhi
+  if (!st) {
+    x.fillStyle = '#fff'; x.shadowColor = '#fff'; x.shadowBlur = 8;
+    x.beginPath(); x.moveTo(cx - 14, 28); x.lineTo(cx - 3, 33); x.lineTo(cx - 13, 37); x.closePath(); x.fill();
+    x.beginPath(); x.moveTo(cx + 14, 28); x.lineTo(cx + 3, 33); x.lineTo(cx + 13, 37); x.closePath(); x.fill();
+    x.shadowBlur = 0; x.strokeStyle = '#fff'; x.lineWidth = 2; x.beginPath(); x.moveTo(cx - 12, 50);
+    for (let i = 0; i < 8; i++) x.lineTo(cx - 12 + (i + 1) * 3.4, 50 + (i % 2 ? -4 : 4)); x.stroke();
+  } else {                                                         // stordito: occhi a spirale, bocca storta
+    x.strokeStyle = '#cbb8ff'; x.lineWidth = 2;
+    for (const sx of [-9, 9]) { x.beginPath(); for (let a = 0; a < 12; a += 0.4) x.lineTo(cx + sx + Math.cos(a) * a * 0.7, 32 + Math.sin(a) * a * 0.7); x.stroke(); }
+    x.beginPath(); x.moveTo(cx - 8, 52); x.quadraticCurveTo(cx, 46, cx + 8, 54); x.stroke();
+  }
+  x.restore();
+});
+const torchSprite = () => spriteCanvas('t', (x) => {
+  ell(x, 48, 50, 34, 34, 'rgba(255,210,90,.18)'); rrect(x, 42, 40, 12, 46, 3, '#555'); rrect(x, 38, 26, 20, 18, 5, '#888'); ell(x, 48, 28, 15, 12, '#ffe27a'); ell(x, 48, 28, 8, 6, '#fff');
+});
+// Pulsante: colonnina con un grosso bottone. Rosso = prima porta, blu = seconda. Verde = premuto adesso.
+const buttonSprite = (d, on) => spriteCanvas('b' + d + on, (x) => {
+  const col = on ? '#3ddc6a' : (d === 0 ? '#e0402f' : '#3a82e0'), dk = on ? '#1f8a40' : (d === 0 ? '#8a2418' : '#1f4f94');
+  ell(x, 48, 92, 24, 5, 'rgba(0,0,0,.4)'); rrect(x, 38, 58, 20, 34, 4, '#666'); rrect(x, 28, 50, 40, 14, 6, '#8a8a92');
+  if (on) ell(x, 48, 44, 38, 30, 'rgba(61,220,106,.25)');
+  rrect(x, 32, on ? 44 : 36, 32, on ? 8 : 16, 6, dk); ell(x, 48, on ? 44 : 36, 16, 8, col); ell(x, 44, on ? 42 : 34, 5, 2.5, 'rgba(255,255,255,.5)');
+});
 
 // ---------- Stato ----------
 const cv = $('cv'), ctx = cv.getContext('2d');
@@ -282,6 +356,7 @@ $('bChat').onclick = () => { const s = $('shout'); s.style.display = s.style.dis
 PH.forEach((t, i) => { const b = document.createElement('button'); b.textContent = t; b.onclick = () => { say(i); $('shout').style.display = 'none'; }; $('shout').appendChild(b); });
 function toggleMute() { Voice.setMuted(!Voice.muted); $('bMute').textContent = Voice.muted ? '🔇 Muto' : '🎤 Mic'; $('bMute').className = Voice.muted ? 'off' : ''; }
 $('bMute').onclick = toggleMute;
+$('bRe').onclick = () => { Voice.reconnect(true); toast('Riconnetto la voce…', 1800, '#9be'); };
 $('bVoice').onclick = () => { Voice.setGlobal(!Voice.global); $('bVoice').textContent = Voice.global ? '📢 Tutti' : '🔊 Vicini'; };
 
 // menu
@@ -415,11 +490,11 @@ function renderScene(dt, Lr) {
   for (const p of S.p) {
     if (p.i === myId) continue; const d = disp.get('p' + p.i); if (!d) continue;
     let label = p.n; if (p.ch) label += ' ⛓' + (p.fr > 0 ? ' ' + Math.round(p.fr * 100) + '%' : '');
-    add(d.x, d.y, playerSprite(p.e, p.ch, p.it), 0.85, 0.1, label, COL[p.e], p.sy);
+    add(d.x, d.y, playerSprite(p.e, p.ch, p.it), 0.55, 0.225, label, COL[p.e], p.sy);
   }
-  if (S.m) { const d = disp.get('m'); if (d) add(d.x, d.y, monsterSprite(S.m[2]), 1.25, 0.02, null, null, null, true); }
-  for (const t of S.tc) add(t[0], t[1], torchSprite(), 0.32, 0.34, null);
-  for (const b of G.bt) add(b.x, b.y, buttonSprite(b.d, S.pb.includes(b.id) ? 1 : 0), 0.34, 0.33, null);
+  if (S.m) { const d = disp.get('m'); if (d) add(d.x, d.y, monsterSprite(S.m[2]), 1.2, -0.1, null, null, null, true); }
+  for (const t of S.tc) add(t[0], t[1], torchSprite(), 0.36, 0.32, null);
+  for (const b of G.bt) add(b.x, b.y, buttonSprite(b.d, S.pb.includes(b.id) ? 1 : 0), 0.4, 0.3, null);
   const labels = [];
   for (const it of items) {
     const dx = it.x - me.x, dy = it.y - me.y; it.fwd = dx * dirX + dy * dirY; it.sx = W / 2 * (1 + ((-dx * dirY + dy * dirX) / (it.fwd || 1)) / FOVK); it.dist = Math.hypot(dx, dy);
@@ -483,7 +558,7 @@ function drawHud(labels, Lr) {
     else { const v = Voice.status(p.i); const P = Voice.peers.get(p.i); st = v === 'ok' ? (P && P.speaking ? '🗣️' : '🔈') : v === 'fail' ? '⚠️' : '⏳'; }
     const y = ch - 14 - (S.p.length - 1 - i) * 19;
     ctx.fillStyle = '#000a'; ctx.fillRect(6, y - 9, 150, 17);
-    ctx.fillStyle = COL[p.e]; ctx.fillText(st + ' ' + EM[p.e] + ' ' + p.n + (p.ch ? ' ⛓' : '') + (p.it ? ' 🔦' : ''), 10, y);
+    ctx.fillStyle = COL[p.e]; ctx.fillText(st + ' ● ' + p.n + (p.ch ? ' ⛓' : '') + (p.it ? ' 🔦' : ''), 10, y);
   });
   // suggerimenti contestuali
   let hint = '';
@@ -492,15 +567,23 @@ function drawHud(labels, Lr) {
     const nt = S.tc.find((t) => Math.hypot(t[0] - me.x, t[1] - me.y) < 1.25);
     const nc = S.p.find((p) => p.i !== myId && p.ch && Math.hypot(p.x - me.x, p.y - me.y) < 1.4);
     if (nc) hint = 'Tieni premuto E per liberare ' + nc.n + (nc.fr > 0 ? ' (' + Math.round(nc.fr * 100) + '%)' : '');
-    else if (nb) hint = 'E: premi il pulsante — serve un amico sull\'altro!';
+    else if (nb) hint = 'E: premi il bottone ' + (nb.d === 0 ? 'ROSSO' : 'BLU') + ' — un amico deve premere l\'altro ' + (nb.d === 0 ? 'rosso' : 'blu') + ' entro 1,5 s';
     else if (nt && !my.it) hint = 'E: raccogli la torcia';
   }
   if (my && my.ch) hint = 'Sei incatenato! Chiama aiuto a voce' + (my.fr > 0 ? ' — ' + Math.round(my.fr * 100) + '%' : '');
   ctx.textAlign = 'center'; ctx.font = 'bold 16px sans-serif';
   if (hint) { ctx.fillStyle = '#000b'; const w = ctx.measureText(hint).width + 20; ctx.fillRect(cw / 2 - w / 2, ch - 90, w, 28); ctx.fillStyle = '#ffe36b'; ctx.fillText(hint, cw / 2, ch - 76); }
-  if (S.ex[0] > 0 && !S.win && S.st === 'play') {
-    const t = 'Porta di uscita: ' + S.ex[0] + '/' + S.ex[1] + ' vicini — servono tutti!';
-    ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#000b'; const w = ctx.measureText(t).width + 20; ctx.fillRect(cw / 2 - w / 2, 28, w, 24); ctx.fillStyle = '#7ee081'; ctx.fillText(t, cw / 2, 40);
+  if (S.st === 'play' && !S.win && G) {
+    const dp = S.dp || 0, small = cw < 520;
+    let t, col;
+    if (dp === 0) { t = small ? 'PORTA ROSSA: 2 amici premono i 2 bottoni rossi (E)' : 'Obiettivo: PORTA ROSSA — due giocatori premono i due bottoni rossi (E) quasi insieme'; col = '#ff8a7a'; }
+    else if (dp === 1) { t = small ? 'PORTA BLU: 2 amici premono i 2 bottoni blu (E)' : 'Obiettivo: PORTA BLU — due giocatori premono i due bottoni blu (E) quasi insieme'; col = '#7ab4ff'; }
+    else { t = small ? 'USCITA: andate TUTTI alla porta verde e aspettate' : 'Obiettivo: USCITA — andate TUTTI vicino alla porta verde e aspettate, si apre da sola (nessun tasto)'; col = '#7ee081'; }
+    ctx.font = 'bold ' + (small ? 12 : 14) + 'px sans-serif'; ctx.fillStyle = '#000b'; const w = Math.min(cw - 12, ctx.measureText(t).width + 20); ctx.fillRect(cw / 2 - w / 2, 46, w, 24); ctx.fillStyle = col; ctx.fillText(t, cw / 2, 58);
+    if (dp === 2 || S.ex[0] > 0) {
+      const t2 = 'Vicini alla porta di uscita: ' + S.ex[0] + '/' + S.ex[1] + (S.ex[0] >= S.ex[1] ? ' — ci siamo, restate lì!' : ' — servono tutti');
+      ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#000b'; const w2 = ctx.measureText(t2).width + 20; ctx.fillRect(cw / 2 - w2 / 2, 74, w2, 24); ctx.fillStyle = '#7ee081'; ctx.fillText(t2, cw / 2, 86);
+    }
   }
   if (!isTouch && !locked && (S.st === 'play' || S.st === 'lobby')) { ctx.font = '12px sans-serif'; ctx.fillStyle = '#fffa'; ctx.fillText('Clicca per usare il mouse · WASD muovi · E usa · Q lascia · 1-4 urla · M muto', cw / 2, ch - 8); }
   // avvisi

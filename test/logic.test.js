@@ -87,7 +87,7 @@ const passable = (v) => v === 0 || v >= constants.D0;
   for (let k = 0; k < 600; k++) { p.a = Math.random() * 6.28; p.in.f = 1; p.in.s = Math.random() - 0.5; step(r, 1 / 30); assert(g[Math.floor(p.y) * N + Math.floor(p.x)] === 0, 'dentro un muro'); }
   const lid0 = r.lid; startGame(r);
   assert(r.lid > lid0 && r.st === 'play' && r.L, 'con Inizia si passa al livello vero');
-  for (const q of r.players.values()) assert.strictEqual(Math.hypot(q.x - r.L.start.x, q.y - r.L.start.y) < 0.6, true, 'tutti alla partenza del livello vero');
+  for (const q of r.players.values()) assert.strictEqual(r.L.spawns.some((sp) => Math.hypot(q.x - sp.x, q.y - sp.y) < 0.1), true, 'ognuno su una partenza del livello vero');
   ok('sala di prova: si cammina nel piccolo labirinto, poi Inizia porta tutti al livello 1');
 }
 

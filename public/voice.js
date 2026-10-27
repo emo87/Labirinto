@@ -2,7 +2,7 @@
 // Chat vocale WebRTC (solo audio, mesh) con voce di prossimità.
 // La segnalazione passa dal WebSocket del gioco: Voice.send({t:'sig',to,d}).
 (function () {
-  const ICE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
+  let ICE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const V = {
     ac: null, local: null, mic: 'pending', muted: false, global: false, ready: false,
@@ -17,6 +17,7 @@
   };
 
   V.initMic = async function () {
+    try { const r = await fetch('/ice', { cache: 'no-store' }); const j = await r.json(); if (Array.isArray(j) && j.length) ICE = j; } catch (e) {}
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('no mediaDevices');
       V.local = await navigator.mediaDevices.getUserMedia({
@@ -61,11 +62,16 @@
     } catch (e) { P.state = 'failed'; }
   }
 
+  function cleanNodes(P) {
+    if (P.nodes) { try { P.nodes.src.disconnect(); P.nodes.gain.disconnect(); } catch (e) {} P.nodes = null; }
+    if (P.el) { try { P.el.srcObject = null; } catch (e) {} P.el = null; }
+  }
   function attach(P, stream) {
+    cleanNodes(P);
     // Chrome richiede che lo stream sia agganciato a un elemento audio perché arrivi a WebAudio
     const a = new Audio(); a.srcObject = stream; a.muted = true; if (a.play) a.play().catch(() => {});
     P.el = a;
-    const ac = V.unlock(); if (!ac) return;
+    const ac = V.unlock(); if (!ac) { a.muted = false; return; }   // senza WebAudio: riproduzione normale, senza prossimità
     const src = ac.createMediaStreamSource(stream);
     const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 20000;
     const gain = ac.createGain(); gain.gain.value = 1;
@@ -78,7 +84,10 @@
 
   V.onSig = async function (from, d) {
     if (!V.ready) { V.queue.push([from, d]); return; }
-    let P = V.peers.get(from) || mkPeer(from);
+    if (d.again) { if (V.myId < from) { dropPeer(from); offer(mkPeer(from), false); } return; }
+    let P = V.peers.get(from);
+    if (P && d.s && d.s.type === 'offer' && (P.pc.connectionState === 'failed' || P.pc.connectionState === 'closed' || P.pc.signalingState === 'have-local-offer')) { dropPeer(from); P = null; }
+    if (!P) P = mkPeer(from);
     try {
       if (d.s) {
         await P.pc.setRemoteDescription(d.s); P.hasRemote = true;
@@ -95,6 +104,29 @@
     } catch (e) { P.state = 'failed'; }
   };
 
+  function dropPeer(id) {
+    const P = V.peers.get(id); if (!P) return;
+    try { P.pc.close(); } catch (e) {}
+    cleanNodes(P); V.peers.delete(id);
+  }
+  // Riavvia da zero tutti i collegamenti non riusciti (anche dal pulsante "Voce")
+  V.reconnect = function (all) {
+    for (const [id, P] of [...V.peers]) {
+      if (!all && P.state === 'connected') continue;
+      dropPeer(id);
+      const N = mkPeer(id);
+      if (V.myId < id) offer(N, false); else V.send({ t: 'sig', to: id, d: { again: 1 } });
+    }
+    V.unlock();
+  };
+  // controllo periodico: collegamenti bloccati da più di 8 s vengono rifatti
+  setInterval(() => {
+    if (!V.ready) return;
+    for (const [id, P] of [...V.peers]) {
+      if (P.state === 'connected') { P.since = Date.now(); continue; }
+      if (Date.now() - P.since > 8000) { dropPeer(id); const N = mkPeer(id); if (V.myId < id) offer(N, false); else V.send({ t: 'sig', to: id, d: { again: 1 } }); }
+    }
+  }, 4000);
   // Allinea i collegamenti con l'elenco dei giocatori presenti: offre il più basso id
   V.sync = function (ids) {
     if (!V.ready) return;
@@ -106,8 +138,7 @@
     for (const [id, P] of V.peers) {
       if (ids.includes(id)) continue;
       try { P.pc.close(); } catch (e) {}
-      if (P.nodes) { try { P.nodes.src.disconnect(); P.nodes.gain.disconnect(); } catch (e) {} }
-      if (P.el) P.el.srcObject = null;
+      cleanNodes(P);
       V.peers.delete(id);
     }
   };
@@ -122,6 +153,7 @@
   // me {x,y,a}, posOf(id) -> {x,y}|null, occluded(a,b) -> bool
   V.update = function (me, posOf, occluded) {
     const ac = V.ac; if (!ac) return;
+    if (ac.state !== 'running' && ac.resume) ac.resume().catch(() => {});
     const now = ac.currentTime, t = performance.now();
     for (const P of V.peers.values()) {
       const n = P.nodes; if (!n) continue;
@@ -133,8 +165,8 @@
       const pos = posOf(P.id);
       if (!V.global && pos) {
         const dx = pos.x - me.x, dy = pos.y - me.y, d = Math.hypot(dx, dy);
-        g = Math.pow(clamp(1 - (d - 2) / 12, 0.06, 1), 1.5);
-        if (occluded(me, pos)) { f = 700; g *= 0.75; }
+        g = clamp(1 - (d - 3) / 22, 0.3, 1);   // la voce non sparisce mai del tutto: da lontano è solo più bassa
+        if (occluded(me, pos)) { f = 1600; g *= 0.85; }
         pn = Math.sin(Math.atan2(dy, dx) - me.a) * 0.85 * Math.min(1, d / 1.5);
       }
       n.gain.gain.setTargetAtTime(g, now, 0.08);
@@ -157,5 +189,8 @@
     return 'wait';
   };
 
+  const wake = () => { if (V.ac && V.ac.state !== 'running') V.ac.resume().catch(() => {}); for (const P of V.peers.values()) if (P.el && P.el.paused && P.el.play) P.el.play().catch(() => {}); };
+  document.addEventListener('visibilitychange', wake);
+  ['pointerdown', 'keydown', 'touchstart'].forEach((e) => document.addEventListener(e, wake, { passive: true }));
   window.Voice = V;
 })();

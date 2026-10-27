@@ -72,3 +72,11 @@ I 4 bot del test conoscono la mappa, non hanno il mostro e non parlano: finiscon
 2. Grafica a emoji e texture generate da codice; si può migliorare con sprite veri.
 3. Suoni semplici (Web Audio), volumi bassi per non coprire le voci.
 4. Idee ancora da fare: ruoli, trappole comiche (bucce di banana, trampolini), altri mostri, classifica dei tempi, riconnessione dopo caduta di rete.
+
+
+## Novità v0.5
+- Ognuno parte da una cella diversa della prima zona (il più lontano possibile dagli altri).
+- Mostro: sagoma nera con occhi bianchi (stordito: occhi a spirale). Giocatori: 4 omini disegnati (cowboy, cuoca, meccanico, ninja), più piccoli dei muri.
+- In alto c'è sempre l'obiettivo: PORTA ROSSA (2 bottoni rossi premuti con E da due giocatori entro 1,5 s), PORTA BLU (idem blu), USCITA (nessun tasto: tutti vicino alla porta verde, si apre da sola). Bottone rosso/blu = non premuto, verde = premuto in questo momento.
+- Muri mobili: ogni spostamento apre una scorciatoia lontana e chiude un altro passaggio, quindi le strade cambiano davvero (porte comunque mai aggirabili).
+- Voce: server TURN (di default uno pubblico gratuito; per uno tuo imposta TURN_URL, TURN_USER, TURN_PASS su Render), ricollegamento automatico, tasto "🔄 Voce", volume mai sotto il 30% anche da lontano.

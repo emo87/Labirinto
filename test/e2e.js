@@ -98,7 +98,7 @@ const check = (c, msg) => { console.log((c ? '  ok   - ' : '  FAIL - ') + msg); 
       V.update = orig;
       return { near, far, lpWall: wall[1] };
     });
-    check(gains.near > 0.9 && gains.far < 0.2, 'voce di prossimità: vicino ' + gains.near.toFixed(2) + ', lontano ' + gains.far.toFixed(2));
+    check(gains.near > 0.9 && gains.far < 0.7 && gains.far > 0.25, 'voce di prossimità: vicino ' + gains.near.toFixed(2) + ', lontano ' + gains.far.toFixed(2));
     check(gains.lpWall < 3000, 'voce attutita dietro un muro (filtro a ' + Math.round(gains.lpWall) + ' Hz)');
 
     // pulsanti touch visibili su telefono

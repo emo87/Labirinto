@@ -93,8 +93,8 @@ function checkInv(L) {
   // dal lato di entrata non si può arrivare al lato di uscita (nemmeno passando da un anello).
   // Questo vale anche per i muri mobili: le zone del labirinto restano quelle e non si salta nessuna porta.
   for (const d of L.doors) {
-    const dist = bfs(g, N, d.a, (i) => passable(g[i]) && i !== d.i);
-    if (dist[d.b] >= 0) return false;
+    const dist = bfs(g, N, L.startIdx, (i) => passable(g[i]) && i !== d.i);
+    if (dist[d.a] < 0 || dist[d.b] >= 0 || dist[L.exitCell] >= 0) return false;
   }
   return true;
 }
@@ -225,6 +225,29 @@ function tryGen(level, nPlayers, seed) {
   const mi = mc[(rnd() * mc.length) | 0] || exitCell;
   L.monsterStart = { x: (mi % N) + 0.5, y: ((mi / N) | 0) + 0.5 };
   L.start = { x: 1.5, y: 1.5, a: g[I(2, 1)] === 0 ? 0 : Math.PI / 2 };
+  // partenze separate: celle diverse della prima zona (prima della prima porta), il più lontane possibile tra loro
+  {
+    const lab2 = labelComps(L), dd = bfs(g, N, startIdx, (i) => g[i] === 0 && !doorSet.has(i));
+    const pool = [];
+    for (let cy = 0; cy < cells; cy++) for (let cx = 0; cx < cells; cx++) {
+      const i = I(2 * cx + 1, 2 * cy + 1);
+      if (lab2[i] === lab2[startIdx] && dd[i] >= 0 && dd[i] <= 14) pool.push(i);
+    }
+    const chosen = [startIdx];
+    while (chosen.length < 4 && chosen.length < pool.length) {
+      let best = -1, bs = -1;
+      for (const c of pool) {
+        if (chosen.includes(c)) continue;
+        const dm = bfs(g, N, c, (i) => g[i] === 0 && !doorSet.has(i));
+        const sc = Math.min(...chosen.map((q) => dm[q]));
+        if (sc > bs) { bs = sc; best = c; }
+      }
+      if (best < 0) break;
+      chosen.push(best);
+    }
+    L.spawns = chosen.map((i) => ({ x: (i % N) + 0.5, y: ((i / N) | 0) + 0.5, a: rnd() * Math.PI * 2 }));
+    L.spawns[0].a = L.start.a;
+  }
   L.exitDoor = doors[2];
   return L;
 }
@@ -308,11 +331,14 @@ function addPlayer(r, ws, name) {
   return p;
 }
 function placePlayers(r) {
-  const L = r.L, offs = [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2], [0, 0], [0, 0.3]];
+  const L = r.L;
+  const taken = new Set([...r.players.values()].filter((p) => p.placed === L.seed).map((p) => p.sp));
   let k = 0;
   for (const p of r.players.values()) {
     if (p.placed === L.seed) continue;
-    p.x = L.start.x + offs[k % offs.length][0]; p.y = L.start.y + offs[k % offs.length][1]; p.a = L.start.a;
+    while (taken.has(k) && k < L.spawns.length - 1) k++;
+    const sp = L.spawns[k % L.spawns.length]; taken.add(k); p.sp = k;
+    p.x = sp.x; p.y = sp.y; p.a = sp.a;
     p.chained = false; p.fr = 0; p.imm = 1; p.it = null; p.placed = L.seed; k++;
   }
 }
@@ -321,7 +347,7 @@ function loadLevel(r, level) {
   const seed = (Math.random() * 4294967296) >>> 0;
   r.L = genLevel(r.level, Math.min(MAXP, Math.max(2, r.players.size)), seed);
   const L = r.L;
-  r.tiles = []; r.winT = 0; r.resetT = 0; r.exitHold = 0; r.lvT0 = r.time; r.lid++;
+  r.tiles = []; r.dp = 0; r.winT = 0; r.resetT = 0; r.exitHold = 0; r.lvT0 = r.time; r.lid++;
   r.shT = 40 + Math.random() * 10; r.shWarn = false; r.boT = 50 + Math.random() * 25; r.boLeft = 0;
   for (const p of r.players.values()) p.placed = null;
   placePlayers(r);
@@ -353,30 +379,50 @@ function entsNear(r, x, y, rad) {
   return false;
 }
 
-// Muri che si spostano: sempre labirinto connesso, porte non aggirabili
+// Muri che si spostano: ogni "scambio" apre un muro (nuova scorciatoia) e ne chiude un altro (vecchia strada),
+// quindi i percorsi cambiano davvero. Sempre labirinto connesso e porte non aggirabili.
 function doShift(r) {
   const L = r.L, { N, g } = L;
   const doorIdx = L.doors.map((d) => d.i);
-  const cand = [];
-  for (let y = 1; y < N - 1; y++) for (let x = 1; x < N - 1; x++) {
-    if ((x + y) % 2 !== 1) continue;
-    const i = y * N + x;
-    if (doorIdx.includes(i)) continue;
-    if (doorIdx.some((di) => Math.max(Math.abs((di % N) - x), Math.abs(((di / N) | 0) - y)) <= 1)) continue;
-    const ex = L.exitDoor;
-    if (Math.max(Math.abs(ex.x - x), Math.abs(ex.y - y)) <= 2) continue;
-    if (entsNear(r, x + 0.5, y + 0.5, 2.4)) continue;
-    cand.push(i);
+  const ex = L.exitDoor;
+  const okTile = (i) => {
+    const x = i % N, y = (i / N) | 0;
+    if ((x + y) % 2 !== 1 || x < 1 || y < 1 || x >= N - 1 || y >= N - 1) return false;
+    if (doorIdx.includes(i)) return false;
+    if (doorIdx.some((di) => Math.max(Math.abs((di % N) - x), Math.abs(((di / N) | 0) - y)) <= 1)) return false;
+    if (Math.max(Math.abs(ex.x - x), Math.abs(ex.y - y)) <= 2) return false;
+    if (entsNear(r, x + 0.5, y + 0.5, 2.6)) return false;
+    return true;
+  };
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  let swaps = 0;
+  for (let round = 0; round < 4 && swaps < 3; round++) {
+    const walls = shuffle([...Array(g.length).keys()].filter((i) => okTile(i) && !passable(g[i])));
+    const floors = shuffle([...Array(g.length).keys()].filter((i) => okTile(i) && passable(g[i])));
+    let ok = false;
+    for (const w of walls.slice(0, 12)) {
+      const x = w % N, y = (w / N) | 0;
+      const sides = (x % 2 === 0) ? [w - 1, w + 1] : [w - N, w + N];
+      if (!sides.every((s) => passable(g[s]))) continue;
+      // lo apro solo se collega due punti davvero lontani: cambia la strada, non è un buchino inutile
+      const d = bfs(g, N, sides[0], (i) => passable(g[i]));
+      if (d[sides[1]] < 8) continue;
+      const wOld = g[w];
+      g[w] = 0;
+      for (const f of floors.slice(0, 30)) {
+        const fOld = g[f], fx = f % N, fy = (f / N) | 0;
+        g[f] = zoneOf(fx, fy, N);
+        if (checkInv(L)) {
+          r.tiles.push([x, y, 0], [fx, fy, g[f]]);
+          swaps++; ok = true; break;
+        }
+        g[f] = fOld;
+      }
+      if (ok) break;
+      g[w] = wOld;
+    }
   }
-  for (let i = cand.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; [cand[i], cand[j]] = [cand[j], cand[i]]; }
-  let done = 0;
-  for (const i of cand) {
-    if (done >= 6) break;
-    const old = g[i], x = i % N, y = (i / N) | 0;
-    g[i] = old === 0 ? zoneOf(x, y, N) : 0;
-    if (checkInv(L)) { done++; r.tiles.push([x, y, g[i]]); } else g[i] = old;
-  }
-  return done;
+  return swaps;
 }
 
 // ---------- Interazioni ----------
@@ -390,7 +436,7 @@ function interact(r, p) {
     const door = L.doors[best.door];
     const [b0, b1] = door.btns.map((id) => L.buttons[id]);
     if (r.time - b0.t <= 1.5 && r.time - b1.t <= 1.5 && b0.by !== b1.by && b0.by >= 0 && b1.by >= 0) {
-      door.open = true; door.until = r.time + 8; setTile(r, door.i, 0);
+      door.open = true; door.until = r.time + 8; setTile(r, door.i, 0); r.dp = Math.max(r.dp || 0, door.id + 1);
       b0.t = b1.t = -99;
       r.ev.push({ k: 'door', x: door.x + 0.5, y: door.y + 0.5 });
     }
@@ -563,7 +609,7 @@ function snapshot(r) {
     tc: L ? L.torches.map((t) => [Math.round(t.x * 100) / 100, Math.round(t.y * 100) / 100]) : [],
     bo: r.boLeft > 0 ? Math.ceil(r.boLeft) : 0,
     sh: r.shT <= 3 && r.shT > 0 ? 1 : 0,
-    ex: [r.exitNear || 0, r.players.size], win: r.winT > 0 ? 1 : 0, rs: r.resetT > 0 ? 1 : 0,
+    ex: [r.exitNear || 0, r.players.size], dp: r.dp || 0, win: r.winT > 0 ? 1 : 0, rs: r.resetT > 0 ? 1 : 0,
     tot: Math.round(r.total),
   };
 }
@@ -586,6 +632,13 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 function makeServer() {
   const server = http.createServer((req, res) => {
     let url = req.url.split('?')[0];
+    if (url === '/ice') {   // server STUN/TURN per la voce: con TURN_URL/TURN_USER/TURN_PASS si usa il proprio, altrimenti un TURN pubblico gratuito (best effort)
+      const ice = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+      if (process.env.TURN_URL) ice.push({ urls: process.env.TURN_URL.split(','), username: process.env.TURN_USER || '', credential: process.env.TURN_PASS || '' });
+      else ice.push({ urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'], username: 'openrelayproject', credential: 'openrelayproject' });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify(ice));
+    }
     if (url === '/') url = '/index.html';
     const f = path.join(__dirname, 'public', path.normalize(url).replace(/^(\.\.[/\\])+/, ''));
     if (!f.startsWith(path.join(__dirname, 'public')) || !MIME[path.extname(f)]) { res.writeHead(404); return res.end('404'); }
